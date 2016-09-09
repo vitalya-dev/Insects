@@ -1,0 +1,12 @@
+def spawn(FPS, total_frames):
+
+    four_seconds = FPS * 4
+
+    if total_frames % four_seconds == 0:
+        
+        r = random.randint(1, 2)
+        x = 1
+        if r == 2:
+            x = 640 - 40
+
+        classes.Fly(x, 130, 40, 35, "images/fly.png")

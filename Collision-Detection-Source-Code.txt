@@ -1,0 +1,248 @@
+----------------------------------------------------------------------------------------------------------------
+In process.py:
+----------------------------------------------------------------------------------------------------------------
+
+import pygame, sys, classes, random
+
+def process(bug, FPS, total_frames):
+	
+    # PROCESSING
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+
+    keys = pygame.key.get_pressed()
+
+    if keys[pygame.K_d]:
+        classes.Bug.going_right = True
+    	bug.image = pygame.image.load("images/bug.png")
+    	bug.velx = 5
+    elif keys[pygame.K_a]:
+        classes.Bug.going_right = False
+    	bug.image = pygame.image.load("images/bugflipped.png")
+    	bug.velx = -5
+    else:
+    	bug.velx = 0
+
+    if keys[pygame.K_w]:
+        bug.jumping = True
+
+    if keys[pygame.K_SPACE]:
+        p = classes.BugProjectile(bug.rect.x, bug.rect.y, 43, 25, "images/projectiles/fire.png")
+        if classes.Bug.going_right:
+            p.velx = 8
+        else:
+            p.image = pygame.transform.flip(p.image, True, False)
+            p.velx = -8
+
+    spawn(FPS, total_frames)
+    collisions()
+
+    # PROCESSING
+
+def spawn(FPS, total_frames):
+
+    four_seconds = FPS * 4
+
+    if total_frames % four_seconds == 0:
+        
+        r = random.randint(1, 2)
+        x = 1
+        if r == 2:
+            x = 640 - 40
+
+        classes.Fly(x, 130, 40, 35, "images/fly.png")
+
+def collisions():
+
+    for fly in classes.Fly.List:
+
+        fly_proj = pygame.sprite.spritecollide(fly, classes.BugProjectile.List, True)
+        if len(fly_proj) > 0:
+            for hit in fly_proj:
+                fly.health -= fly.half_health 
+
+
+----------------------------------------------------------------------------------------------------------------
+classes.py                
+----------------------------------------------------------------------------------------------------------------
+
+
+import pygame , math
+from random import randint
+
+class BaseClass(pygame.sprite.Sprite):
+	
+	allsprites = pygame.sprite.Group()
+	def __init__(self, x, y, width, height, image_string):
+		
+		pygame.sprite.Sprite.__init__(self)
+		BaseClass.allsprites.add(self)
+
+		self.image = pygame.image.load(image_string)
+		
+		self.rect = self.image.get_rect()
+		self.rect.x = x
+		self.rect.y = y
+
+		self.width = width
+		self.height = height
+
+	def destroy(self, ClassName):
+
+		ClassName.List.remove(self)
+		BaseClass.allsprites.remove(self)
+		del self
+
+class Bug(BaseClass):
+
+	List = pygame.sprite.Group()
+	going_right = True
+
+	def __init__(self, x, y, width, height, image_string):
+		
+		BaseClass.__init__(self, x, y, width, height, image_string)
+		Bug.List.add(self)
+		self.velx, self.vely = 0, 8
+		self.jumping, self.go_down = False, False
+
+	def motion(self, SCREENWIDTH, SCREENHEIGHT):
+
+		predicted_location = self.rect.x + self.velx
+
+		if predicted_location < 0:
+			self.velx = 0
+		elif predicted_location + self.width > SCREENWIDTH:
+			self.velx = 0
+
+		self.rect.x += self.velx
+
+		self.__jump(SCREENHEIGHT)
+	
+	def __jump(self, SCREENHEIGHT):
+
+		max_jump = 75
+
+		if self.jumping:
+			
+			if self.rect.y < max_jump:
+				self.go_down = True
+
+			if self.go_down:
+				self.rect.y += self.vely
+
+				predicted_location = self.rect.y + self.vely
+
+				if predicted_location + self.height > SCREENHEIGHT:
+					self.jumping = False
+					self.go_down = False
+			else:
+				self.rect.y -= self.vely
+
+class Fly(BaseClass):
+
+	List = pygame.sprite.Group()
+	def __init__(self, x, y, width, height, image_string):
+		BaseClass.__init__(self, x, y, width, height, image_string)
+		Fly.List.add(self)
+		self.health = 100
+		self.half_health = self.health / 2.0
+		self.velx = randint(1, 4)
+		self.amplitude, self.period = randint(20, 140), randint(4, 5) / 100.0
+
+	@staticmethod
+	def update_all(SCREENWIDTH):
+
+		for fly in Fly.List:
+
+			fly.fly(SCREENWIDTH)
+
+			if fly.health <= 0:
+				fly.destroy(Fly)
+		
+
+	def fly(self, SCREENWIDTH):
+
+		if self.rect.x + self.width > SCREENWIDTH or self.rect.x < 0:
+			self.image = pygame.transform.flip( self.image, True, False )
+			self.velx = -self.velx
+
+		self.rect.x += self.velx
+
+		# a * sin( bx + c ) + y
+
+		self.rect.y = self.amplitude * math.sin(self.period * self.rect.x) + 140
+
+
+class BugProjectile(pygame.sprite.Sprite):
+
+	List = pygame.sprite.Group()
+	normal_list = []
+
+	def __init__(self, x, y, width, height, image_string):
+
+		pygame.sprite.Sprite.__init__(self)
+		self.image = pygame.image.load(image_string)
+		
+		self.rect = self.image.get_rect()
+		self.rect.x = x
+		self.rect.y = y
+
+		self.width = width
+		self.height = height
+
+		try:
+			last_element = BugProjectile.normal_list[-1]
+			difference = abs(self.rect.x - last_element.rect.x)
+
+			if difference < self.width:
+				return
+
+		except Exception:
+			pass
+
+		BugProjectile.normal_list.append(self)
+		BugProjectile.List.add(self)
+		self.velx = None
+
+	@staticmethod
+	def movement():
+		for projectile in BugProjectile.List:
+			projectile.rect.x += projectile.velx
+
+----------------------------------------------------------------------------------------------------------------
+main.py
+----------------------------------------------------------------------------------------------------------------
+
+import pygame, sys
+from classes import *
+from process import process
+
+pygame.init()
+SCREENWIDTH, SCREENHEIGHT = 640, 360
+screen = pygame.display.set_mode( (SCREENWIDTH, SCREENHEIGHT) )
+clock = pygame.time.Clock()
+FPS = 24
+total_frames = 0
+
+background = pygame.image.load("images/forest.jpg")
+bug = Bug(0, SCREENHEIGHT - 40, 40, 40, "images/bug.png")
+
+# -------- Main Program Loop -----------
+while True:
+    process(bug, FPS, total_frames)
+    # LOGIC
+    bug.motion(SCREENWIDTH, SCREENHEIGHT)
+    Fly.update_all(SCREENWIDTH)
+    BugProjectile.movement()
+    total_frames += 1
+    # LOGIC
+    # DRAW
+    screen.blit(background, (0,0) )
+    BaseClass.allsprites.draw(screen)
+    BugProjectile.List.draw(screen)
+    pygame.display.flip()
+    # DRAW
+
+    clock.tick(FPS)
